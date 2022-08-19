@@ -1,0 +1,8 @@
+.wrap {
+  width: 800px;
+  height: 90vh;
+}
+
+#map {
+  height: 100%;
+}
