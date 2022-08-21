@@ -14,6 +14,14 @@ export class AppComponent implements AfterViewInit {
   listMarker: google.maps.Marker[] = [];
   infoWindow = new google.maps.InfoWindow();
 
+  // Tìm địa điểm
+  geocoder!: google.maps.Geocoder;
+  makerForGeocoder!: google.maps.Marker;
+
+  // Tìm đường
+  directionService!: google.maps.DirectionsService;
+  directionRender!: google.maps.DirectionsRenderer;
+
   locations = [
     {
       lat: 21.037960277874888,
@@ -51,6 +59,9 @@ export class AppComponent implements AfterViewInit {
     this.makeInfoWindow();
     this.makePolyline();
     this.makePolygon();
+    this.makeCicle();
+    this.makeGeoCode();
+    this.makeDirection();
   }
 
   initMap() {
@@ -83,7 +94,6 @@ export class AppComponent implements AfterViewInit {
   }
 
   getCurrentLocaion() {
-    console.log('navigator: ', navigator)
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position: GeolocationPosition) => {
@@ -160,7 +170,122 @@ export class AppComponent implements AfterViewInit {
       fillOpacity: 0.3
     })
 
-    drawTriang.setMap(this.map)
+    drawTriang.setMap(this.map);
+    drawTriang.addListener('click', (event: any) => {
+    })
+  }
+
+  makeCicle() {
+    const circle = new google.maps.Circle({
+      center: new google.maps.LatLng(21.00428940515907, 105.80776338793243),
+      radius: 1000,
+      strokeColor: 'red',
+      fillColor: 'red',
+      fillOpacity: 0.3,
+      editable: true,
+      draggable: true
+    })
+    circle.setMap(this.map)
+  }
+
+  makeGeoCode() {
+    this.geocoder = new google.maps.Geocoder();
+
+    const inputText = document.createElement("input");
+
+    inputText.type = "text";
+    inputText.placeholder = "Enter a location";
+
+    const submitButton = document.createElement("input");
+
+    submitButton.type = "button";
+    submitButton.value = "Geocode";
+    submitButton.classList.add("button", "button-primary");
+
+    const clearButton = document.createElement("input");
+
+    clearButton.type = "button";
+    clearButton.value = "Clear";
+    clearButton.classList.add("button", "button-secondary")
+
+    this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(inputText);
+    this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(submitButton);
+    this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(clearButton);
+
+    this.makerForGeocoder = new google.maps.Marker({
+      map: this.map
+    });
+
+    submitButton.addEventListener("click", () =>
+      this.geocodeFunctionCall({ address: inputText.value })
+    );
+
+    clearButton.addEventListener("click", () => {
+      this.makerForGeocoder.setMap(null)
+    });
+  }
+
+  geocodeFunctionCall(request: google.maps.GeocoderRequest): void {
+    this.makerForGeocoder.setMap(null);
+    this.geocoder
+      .geocode(request)
+      .then((result) => {
+        const { results } = result;
+
+        this.map.setCenter(results[0].geometry.location);
+        this.makerForGeocoder.setPosition(results[0].geometry.location);
+        this.makerForGeocoder.setMap(this.map);
+        return results;
+      })
+      .catch((e) => {
+        alert("Geocode was not successful for the following reason: " + e);
+      });
+  }
+
+  makeDirection() {
+    const inputTextStart = document.createElement("input");
+    const inputTextEnd = document.createElement("input");
+
+    inputTextStart.type = "text";
+    inputTextStart.name = "start";
+    inputTextStart.placeholder = "Enter a location start";
+
+    inputTextEnd.type = "text";
+    inputTextEnd.name = "end";
+    inputTextEnd.placeholder = "Enter a location end";
+
+    const searchBtn = document.createElement("input");
+
+    searchBtn.type = "button";
+    searchBtn.value = "Tìm đường";
+
+    this.map.controls[google.maps.ControlPosition.BOTTOM_LEFT].push(inputTextStart);
+    this.map.controls[google.maps.ControlPosition.BOTTOM_LEFT].push(inputTextEnd);
+    this.map.controls[google.maps.ControlPosition.BOTTOM_LEFT].push(searchBtn);
+
+    this.directionService = new google.maps.DirectionsService();
+    this.directionRender = new google.maps.DirectionsRenderer();
+
+    this.directionRender.setMap(this.map)
+    searchBtn.addEventListener('click', () => {
+      this.calculateAndDisplayRoute(inputTextStart, inputTextEnd)
+    })
+  }
+
+  calculateAndDisplayRoute(inputTextStart: HTMLInputElement, inputTextEnd: HTMLInputElement) {
+    // tìm đường
+    this.directionService
+    .route({
+      origin: {
+        query: inputTextStart.value
+      },
+      destination: inputTextEnd.value,
+      travelMode: google.maps.TravelMode.WALKING
+    })
+    .then(respon => {
+      console.log('Respon direction: ', respon)
+      this.directionRender.setDirections(respon)
+    })
   }
 }
 
