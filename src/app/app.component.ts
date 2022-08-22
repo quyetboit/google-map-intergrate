@@ -1,4 +1,5 @@
-import { AfterViewInit, Component } from '@angular/core';
+import { AfterViewInit, Component, Input } from '@angular/core';
+import { async } from '@angular/core/testing';
 // import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { } from 'google.maps';
 // import { } from 'supercluster'
@@ -21,6 +22,9 @@ export class AppComponent implements AfterViewInit {
   // Tìm đường
   directionService!: google.maps.DirectionsService;
   directionRender!: google.maps.DirectionsRenderer;
+
+  // Drawing Libary
+  drawingManager!: google.maps.drawing.DrawingManager;
 
   locations = [
     {
@@ -62,6 +66,8 @@ export class AppComponent implements AfterViewInit {
     this.makeCicle();
     this.makeGeoCode();
     this.makeDirection();
+    // this.makeDrawingTool();
+    this.makePlaceSearch();
   }
 
   initMap() {
@@ -71,6 +77,10 @@ export class AppComponent implements AfterViewInit {
       {
         center: new google.maps.LatLng(21.037559730072303, 105.83498946276866),
         zoom: 15,
+        zoomControl: false,
+        fullscreenControl: false,
+        streetViewControl: false,
+        disableDefaultUI: true
       }
     )
   }
@@ -230,6 +240,7 @@ export class AppComponent implements AfterViewInit {
     this.geocoder
       .geocode(request)
       .then((result) => {
+        console.log('Result search map: ', result)
         const { results } = result;
 
         this.map.setCenter(results[0].geometry.location);
@@ -265,27 +276,144 @@ export class AppComponent implements AfterViewInit {
 
     this.directionService = new google.maps.DirectionsService();
     this.directionRender = new google.maps.DirectionsRenderer();
+    this.directionRender.setPanel(
+      document.getElementById('sidebar') as HTMLElement
+    )
 
     this.directionRender.setMap(this.map)
     searchBtn.addEventListener('click', () => {
-      this.calculateAndDisplayRoute(inputTextStart, inputTextEnd)
+      Promise.all([this.getPlaceIdByAdressSearch(inputTextStart.value), this.getPlaceIdByAdressSearch(inputTextEnd.value)])
+        .then(result => {
+          let startPoint = result[0]
+          let endPoint = result[1]
+          this.calculateAndDisplayRoute(startPoint, endPoint)
+        })
     })
   }
-
-  calculateAndDisplayRoute(inputTextStart: HTMLInputElement, inputTextEnd: HTMLInputElement) {
+  calculateAndDisplayRoute(start: any, end: any) {
     // tìm đường
     this.directionService
     .route({
-      origin: {
-        query: inputTextStart.value
-      },
-      destination: inputTextEnd.value,
+      origin: start,
+      destination: end,
       travelMode: google.maps.TravelMode.WALKING
     })
     .then(respon => {
       console.log('Respon direction: ', respon)
       this.directionRender.setDirections(respon)
     })
+  }
+
+  async getPlaceIdByAdressSearch(address: string) {
+    let latLng;
+    await this.geocoder.geocode({address})
+      .then((result) => {
+        const { results } = result;
+        latLng = results[0].geometry.location;
+        latLng = {
+          lat: latLng.lat(),
+          lng: latLng.lng()
+        }
+      })
+    return latLng
+  }
+
+  makeDrawingTool() {
+    this.drawingManager = new google.maps.drawing.DrawingManager({
+      drawingMode: google.maps.drawing.OverlayType.MARKER,
+      drawingControl: true,
+      drawingControlOptions: {
+        position: google.maps.ControlPosition.TOP_CENTER,
+        drawingModes: [
+          google.maps.drawing.OverlayType.MARKER,
+          google.maps.drawing.OverlayType.CIRCLE,
+          google.maps.drawing.OverlayType.POLYGON,
+          google.maps.drawing.OverlayType.POLYLINE,
+          google.maps.drawing.OverlayType.RECTANGLE,
+        ],
+      },
+      markerOptions: {
+        icon: "https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png",
+      },
+      circleOptions: {
+        fillColor: "#ffff00",
+        fillOpacity: 1,
+        strokeWeight: 5,
+        clickable: false,
+        editable: true,
+        zIndex: 1,
+      }
+    });
+    this.drawingManager.setMap(this.map)
+  }
+
+  makePlaceSearch() {
+    const inputSearchPlace = document.createElement('input');
+    inputSearchPlace.type = 'text';
+    this.map.controls[google.maps.ControlPosition.TOP_RIGHT].push(inputSearchPlace);
+
+    const searchBox = new google.maps.places.SearchBox(inputSearchPlace)
+
+    this.map.addListener("bounds_changed", () => {
+      searchBox.setBounds(this.map.getBounds() as google.maps.LatLngBounds);
+    });
+
+    let markers: google.maps.Marker[] = [];
+
+    searchBox.addListener("places_changed", () => {
+      const places = searchBox.getPlaces();// Lấy tất cả các địa điểm matching với địa điểm nhập trong ô input
+
+      console.log("Place: ", places)
+
+      if (places?.length == 0) {
+        return;
+      }
+
+      // Clear out the old markers.
+      markers.forEach((marker) => {
+        marker.setMap(null);
+      });
+      markers = []; //reset marker array
+
+      // For each place, get the icon, name and location.
+      const bounds = new google.maps.LatLngBounds();
+
+
+      //Đánh dấu tất cả các địa điểm tìm được matching với kết quả nhập trong search box
+      places?.forEach((place) => {
+        if (!place.geometry || !place.geometry.location) {
+          console.log("Returned place contains no geometry");
+          return;
+        }
+
+        const icon = {
+          url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Flag_icon_orange_3.svg/1200px-Flag_icon_orange_3.svg.png',
+          size: new google.maps.Size(71, 71),
+          origin: new google.maps.Point(0, 0),
+          anchor: new google.maps.Point(17, 34),
+          scaledSize: new google.maps.Size(25, 25),
+        };
+
+        // Create a marker for each place.
+        markers.push(
+          new google.maps.Marker({
+            map: this.map,
+            icon,
+            title: place.name,
+            position: place.geometry.location,
+          })
+        );
+
+        // Phần này để mở giới hạn(bound) của viewport (Mục đích là để có thể nhìn thấy tất cả các địa điểm tìm kiếm trong 1 khung nhìn)
+        if (place.geometry.viewport) {
+          // Only geocodes have viewport.
+          bounds.union(place.geometry.viewport);
+        } else {
+          bounds.extend(place.geometry.location);
+        }
+      });
+      this.map.fitBounds(bounds);
+    });
   }
 }
 
